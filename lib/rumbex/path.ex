@@ -22,6 +22,7 @@ defmodule Rumbex.Path do
   # "\\host\share\rel" -> {"\\host\share", "rel"}
   def parse_smb_url!(<<"\\\\", _::binary>> = unc) do
     ["" | rest] = String.split(unc, "\\")
+
     case rest do
       [_empty, host, share | tail] -> {"\\\\#{host}\\#{share}", Enum.join(tail, "/")}
       _ -> raise ArgumentError, "bad UNC"

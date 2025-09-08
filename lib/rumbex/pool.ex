@@ -10,8 +10,11 @@ defmodule Rumbex.Pool do
   alias Rumbex.Native
 
   @type opt ::
-          {:name, atom()} | {:url, String.t()} | {:username, String.t()} |
-          {:password, String.t()} | {:size, pos_integer()}
+          {:name, atom()}
+          | {:url, String.t()}
+          | {:username, String.t()}
+          | {:password, String.t()}
+          | {:size, pos_integer()}
 
   ## ===== Public API =====
 
@@ -23,30 +26,32 @@ defmodule Rumbex.Pool do
     %{
       id: Keyword.get(opts, :name, __MODULE__),
       start: {__MODULE__, :start_link, [opts]},
-      type: :worker, restart: :permanent, shutdown: 5000
+      type: :worker,
+      restart: :permanent,
+      shutdown: 5000
     }
   end
 
   # Операции. Все вызывают соответствующий handle_call без каких-либо анонимных функций.
-  def list_dir(pool, path),      do: GenServer.call(pool, {:list_dir, path}, :infinity)
-  def read_file(pool, path),     do: GenServer.call(pool, {:read_file, path}, :infinity)
+  def list_dir(pool, path), do: GenServer.call(pool, {:list_dir, path}, :infinity)
+  def read_file(pool, path), do: GenServer.call(pool, {:read_file, path}, :infinity)
   def write_file(pool, p, data), do: GenServer.call(pool, {:write_file, p, data}, :infinity)
   def upload_file(pool, lp, rp), do: GenServer.call(pool, {:upload_file, lp, rp}, :infinity)
   def download_file(pool, rp, lp), do: GenServer.call(pool, {:download_file, rp, lp}, :infinity)
-  def mkdir(pool, path),         do: GenServer.call(pool, {:mkdir, path}, :infinity)
-  def mkdir_p(pool, path),       do: GenServer.call(pool, {:mkdir_p, path}, :infinity)
-  def move_file(pool, a, b),     do: GenServer.call(pool, {:move_file, a, b}, :infinity)
-  def get_stat(pool, path),      do: GenServer.call(pool, {:get_stat, path}, :infinity)
-  def get_file_stats(pool, path),do: GenServer.call(pool, {:get_file_stats, path}, :infinity)
-  def exists(pool, path),        do: GenServer.call(pool, {:exists, path}, :infinity)
-  def delete_file(pool, path),   do: GenServer.call(pool, {:delete_file, path}, :infinity)
+  def mkdir(pool, path), do: GenServer.call(pool, {:mkdir, path}, :infinity)
+  def mkdir_p(pool, path), do: GenServer.call(pool, {:mkdir_p, path}, :infinity)
+  def move_file(pool, a, b), do: GenServer.call(pool, {:move_file, a, b}, :infinity)
+  def get_stat(pool, path), do: GenServer.call(pool, {:get_stat, path}, :infinity)
+  def get_file_stats(pool, path), do: GenServer.call(pool, {:get_file_stats, path}, :infinity)
+  def exists(pool, path), do: GenServer.call(pool, {:exists, path}, :infinity)
+  def delete_file(pool, path), do: GenServer.call(pool, {:delete_file, path}, :infinity)
   def refresh(pool, which \\ :all), do: GenServer.call(pool, {:refresh, which}, :infinity)
 
   ## ===== GenServer =====
 
   @impl GenServer
   def init(opts) do
-    url  = Keyword.fetch!(opts, :url)
+    url = Keyword.fetch!(opts, :url)
     user = Keyword.fetch!(opts, :username)
     pass = Keyword.fetch!(opts, :password)
     size = Keyword.get(opts, :size, 5) |> max(1)
@@ -57,8 +62,8 @@ defmodule Rumbex.Pool do
     {:ok, %{unc: unc, user: user, pass: pass, conns: conns, next: 0}}
   rescue
     e in ArgumentError -> {:stop, e.message}
-    e in ErlangError   -> {:stop, e.original}
-    e in RuntimeError  -> {:stop, e.message}
+    e in ErlangError -> {:stop, e.original}
+    e in RuntimeError -> {:stop, e.message}
   end
 
   # ---- handle_call: явные матчеры на каждую операцию ----
@@ -142,6 +147,7 @@ defmodule Rumbex.Pool do
   ## ===== internal =====
 
   defp checkout(%{conns: [one]} = s), do: {one, s}
+
   defp checkout(%{conns: conns, next: i} = s) do
     n = length(conns)
     idx = rem(i, n)

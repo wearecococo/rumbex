@@ -3,11 +3,19 @@ defmodule Rumbex.Operations do
   alias Rumbex.Native
 
   def list_dir(conn, rel) do
-    try do Native.list_dir(conn, rel) rescue e in ErlangError -> {:error, e.original} end
+    try do
+      Native.list_dir(conn, rel)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
   end
 
   def read_file(conn, rel) do
-    try do Native.read_file(conn, rel) rescue e in ErlangError -> {:error, e.original} end
+    try do
+      Native.read_file(conn, rel)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
   end
 
   def write_file(conn, rel, bin) do
@@ -35,22 +43,34 @@ defmodule Rumbex.Operations do
   end
 
   def mkdir(conn, rel) do
-    try do Native.mkdir(conn, rel) rescue e in ErlangError -> {:error, e.original} end
+    try do
+      Native.mkdir(conn, rel)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
   end
 
   def mkdir_p(conn, rel) do
-    try do Native.mkdir_p(conn, rel) rescue e in ErlangError -> {:error, e.original} end
+    try do
+      Native.mkdir_p(conn, rel)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
   end
 
   def move_file(conn, from_rel, to_rel) do
-    try do Native.rename(conn, from_rel, to_rel, false) rescue e in ErlangError -> {:error, e.original} end
+    try do
+      Native.rename(conn, from_rel, to_rel, false)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
   end
 
   def get_stat(conn, rel) do
     try do
       case Native.stat(conn, rel) do
         {:ok, {size, false}} -> {:ok, %{size: size, type: :file}}
-        {:ok, {_0, true}}    -> {:ok, %{size: 0,   type: :directory}}
+        {:ok, {_0, true}} -> {:ok, %{size: 0, type: :directory}}
         other -> other
       end
     rescue
@@ -70,10 +90,18 @@ defmodule Rumbex.Operations do
   end
 
   def exists(conn, rel) do
-    try do Native.exists(conn, rel) rescue e in ErlangError -> {:error, e.original} end
+    try do
+      Native.exists(conn, rel)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
   end
 
   def delete_file(conn, rel) do
-    try do Native.rm(conn, rel) rescue e in ErlangError -> {:error, e.original} end
+    try do
+      Native.rm(conn, rel)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
   end
 end
