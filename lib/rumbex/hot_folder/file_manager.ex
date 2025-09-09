@@ -23,25 +23,54 @@ defmodule Rumbex.HotFolder.FileManager do
 
   @doc """
   Extract a basic file tuple {name, size} from entry returned by `Rumbex.list_dir/4`.
-  We support both `%{name:, type:, size:}` and string names (fallback to stat).
+  We support: binaries, and maps with keys like :name/"name"/:filename and :type/:size.
   """
   @spec entry_to_name_size(String.t(), String.t(), String.t(), String.t(), term()) ::
           {String.t(), non_neg_integer()} | :skip
-  def entry_to_name_size(_url, _u, _p, _dir, %{name: name, type: :file, size: size})
-      when is_binary(name),
-      do: {name, size}
 
-  def entry_to_name_size(_url, _u, _p, _dir, %{type: :directory}), do: :skip
+  def entry_to_name_size(url, u, p, dir, {name, type}) when is_binary(name) do
+    case type do
+      t when t in [:directory, "directory"] -> :skip
+      _ -> stat_to_tuple(url, u, p, Path.join(dir, name))
+    end
+  end
 
-  def entry_to_name_size(url, u, p, dir, name) when is_binary(name) do
-    # Last resort — stat
-    case Rumbex.get_file_stats(url, u, p, Path.join(dir, name)) do
-      {:ok, %{type: :file, size: size}} -> {name, size}
-      _ -> :skip
+  def entry_to_name_size(url, u, p, dir, entry) when is_binary(entry) do
+    stat_to_tuple(url, u, p, Path.join(dir, entry))
+  end
+
+  def entry_to_name_size(url, u, p, dir, entry) when is_map(entry) do
+    name =
+      Map.get(entry, :name) || Map.get(entry, "name") || Map.get(entry, :filename) ||
+        Map.get(entry, "filename")
+
+    type = Map.get(entry, :type) || Map.get(entry, "type")
+    size = Map.get(entry, :size) || Map.get(entry, "size")
+
+    cond do
+      is_binary(name) and type in [:directory, "directory"] ->
+        :skip
+
+      is_binary(name) and is_integer(size) and type in [:file, :regular, "file", nil] ->
+        {name, size}
+
+      is_binary(name) ->
+        stat_to_tuple(url, u, p, Path.join(dir, name))
+
+      true ->
+        :skip
     end
   end
 
   def entry_to_name_size(_url, _u, _p, _dir, _), do: :skip
+
+  defp stat_to_tuple(url, u, p, full) do
+    case Rumbex.get_file_stats(url, u, p, full) do
+      {:ok, %{type: t, size: size}} when t in [:file, :regular] -> {Path.basename(full), size}
+      _ -> :skip
+    end
+  end
+
   def move(url, u, p, from, to), do: Rumbex.move_file(url, u, p, from, to)
 
   def write_error_sidecar(url, u, p, dest_path, reason) do

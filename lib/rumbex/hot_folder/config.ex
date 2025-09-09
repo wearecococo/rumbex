@@ -33,11 +33,14 @@ defmodule Rumbex.HotFolder.Config do
       mime_map: nil | %{".pdf" => "application/pdf"} # used only if you match by extension
       }
 
-      Polling / stability / retries:
+    Polling / stability / retries:
     * `:poll_interval` => %{initial: 1_000, max: 30_000, backoff_factor: 2.0}
     * `:stability` => %{checks: 2, interval: 1_000} # require N identical sizes
     * `:handler_timeout` (ms) default 300_000
     * `:max_retries` integer >= 0 (default 3)
+
+    Idempotency:
+    * `:on_success` => :overwrite | :unique | :idempotent_if_same_size (default :overwrite)
   """
 
   @enforce_keys [:handler]
@@ -65,7 +68,8 @@ defmodule Rumbex.HotFolder.Config do
             stability: %{checks: 2, interval: 1_000},
             handler: nil,
             handler_timeout: 300_000,
-            max_retries: 3
+            max_retries: 3,
+            on_success: :overwrite
 
   @type t :: %__MODULE__{
           url: String.t() | nil,
@@ -84,7 +88,8 @@ defmodule Rumbex.HotFolder.Config do
           stability: %{checks: pos_integer(), interval: pos_integer()},
           handler: (map() -> {:ok, term()} | {:error, term()}) | {module(), atom(), list()},
           handler_timeout: pos_integer(),
-          max_retries: non_neg_integer()
+          max_retries: non_neg_integer(),
+          on_success: :overwrite | :unique | :idempotent_if_same_size
         }
 
   @spec new(map() | t()) :: t()

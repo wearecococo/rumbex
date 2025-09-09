@@ -8,6 +8,19 @@ defmodule Rumbex.HotFolder.FileFilter do
     name_ok?(name, filters) and size_ok?(size, filters)
   end
 
+  def collision?(reason) when is_binary(reason),
+    do: String.contains?(reason, "Object Name Collision")
+
+  def collision?({:error, :exists}), do: true
+  def collision?(_), do: false
+
+  def unique_variant(path) do
+    ext = Path.extname(path)
+    base = Path.rootname(path, ext)
+    ts = System.system_time(:millisecond)
+    base <> "-" <> Integer.to_string(ts) <> ext
+  end
+
   defp name_ok?(name, %{name_patterns: pats} = filters) do
     include = Enum.empty?(pats) or Enum.any?(pats, &Regex.match?(&1, name))
 
@@ -30,6 +43,14 @@ defmodule Rumbex.HotFolder.FileFilter do
     include and not exclude and ext_ok
   end
 
-  defp size_ok?(size, %{min_size: min, max_size: :infinity}), do: size >= min
-  defp size_ok?(size, %{min_size: min, max_size: max}), do: size >= min and size <= max
+  defp size_ok?(size, filters) do
+    min = Map.get(filters, :min_size, 0)
+    max = Map.get(filters, :max_size, :infinity)
+
+    if max == :infinity do
+      size >= min
+    else
+      size >= min and size <= max
+    end
+  end
 end
