@@ -32,7 +32,7 @@ defmodule Rumbex.Pool do
     }
   end
 
-  # Операции. Все вызывают соответствующий handle_call без каких-либо анонимных функций.
+  # Operations. All call the corresponding handle_call without any anonymous functions.
   def list_dir(pool, path), do: GenServer.call(pool, {:list_dir, path}, :infinity)
   def read_file(pool, path), do: GenServer.call(pool, {:read_file, path}, :infinity)
   def write_file(pool, p, data), do: GenServer.call(pool, {:write_file, p, data}, :infinity)
@@ -66,7 +66,7 @@ defmodule Rumbex.Pool do
     e in RuntimeError -> {:stop, e.message}
   end
 
-  # ---- handle_call: явные матчеры на каждую операцию ----
+  # ---- handle_call: explicit matchers for each operation ----
 
   @impl GenServer
   def handle_call({:list_dir, path}, _from, s) do

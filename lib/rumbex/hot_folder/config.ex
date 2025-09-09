@@ -40,7 +40,7 @@ defmodule Rumbex.HotFolder.Config do
     * `:max_retries` integer >= 0 (default 3)
 
     Idempotency:
-    * `:on_success` => :overwrite | :unique | :idempotent_if_same_size (default :overwrite)
+    * `:on_success` => :overwrite | :unique | :idempotent_if_same_size (default :unique)
   """
 
   @enforce_keys [:handler]
@@ -69,7 +69,7 @@ defmodule Rumbex.HotFolder.Config do
             handler: nil,
             handler_timeout: 300_000,
             max_retries: 3,
-            on_success: :overwrite
+            on_success: :unique
 
   @type t :: %__MODULE__{
           url: String.t() | nil,

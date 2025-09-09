@@ -98,4 +98,27 @@ defmodule Rumbex.HotFolder.FileManager do
     path = if String.starts_with?(path, "/"), do: path, else: "/" <> path
     Path.expand(path)
   end
+
+  def overwrite_move(url, u, p, from, to) do
+    with :ok <- delete_if_exists(url, u, p, to) do
+      Rumbex.move_file(url, u, p, from, to)
+    end
+  end
+
+  def move_unique(url, u, p, from, to) do
+    alt = Rumbex.HotFolder.FileFilter.unique_variant(to)
+
+    case Rumbex.move_file(url, u, p, from, alt) do
+      :ok -> {:ok, alt}
+      other -> other
+    end
+  end
+
+  def delete_if_exists(url, u, p, path) do
+    case Rumbex.exists(url, u, p, path) do
+      {:ok, :file} -> Rumbex.delete_file(url, u, p, path)
+      {:ok, :directory} -> {:error, :target_is_directory}
+      _ -> :ok
+    end
+  end
 end
