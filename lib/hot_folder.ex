@@ -219,16 +219,17 @@ defmodule Rumbex.HotFolder do
   end
 
   defp do_process_one(name, size, full_incoming_path, %State{} = s) do
-    # move to processing
-    processing_path = Path.join(s.dirs.processing, name)
+    processing_base = Path.join(s.dirs.processing, name)
 
-    case FileManager.move(s.url, s.u, s.p, full_incoming_path, processing_path) do
-      :ok ->
+    case FileManager.move_unique(s.url, s.u, s.p, full_incoming_path, processing_base) do
+      {:ok, processing_path} ->
+        # processing_path — unique path; name remains original (for success)
         handle_processing(name, size, processing_path, s)
 
       {:error, reason} ->
-        warn("move to processing failed: #{inspect(reason)}")
-        reschedule(%{s | status: :error, current_file: nil})
+        warn("move to processing (unique) failed: #{inspect(reason)}")
+        s = %{s | status: :error, current_file: nil}
+        reschedule(s)
     end
   end
 
@@ -238,31 +239,63 @@ defmodule Rumbex.HotFolder do
     case Handler.call(s.cfg.handler, info, s.cfg.handler_timeout) do
       {:ok, _res} ->
         # move to success
-        dest = Path.join(s.dirs.success, name)
+        dest_base = Path.join(s.dirs.success, name)
 
-        case FileManager.move(s.url, s.u, s.p, processing_path, dest) do
+        case FileManager.move(s.url, s.u, s.p, processing_path, dest_base) do
           :ok ->
             s = %{s | files_processed: s.files_processed + 1, status: :polling, current_file: nil}
             reschedule(s)
 
-          {:error, reason} ->
-            warn("move to success failed: #{inspect(reason)}")
-            s = %{s | files_failed: s.files_failed + 1, status: :error, current_file: nil}
-            reschedule(s)
+          {:error, _reason} ->
+            case FileManager.move_unique(s.url, s.u, s.p, processing_path, dest_base) do
+              {:ok, alt} ->
+                warn("dest exists, saved as #{Path.basename(alt)}")
+
+                s = %{
+                  s
+                  | files_processed: s.files_processed + 1,
+                    status: :polling,
+                    current_file: nil
+                }
+
+                reschedule(s)
+
+              {:error, move_reason} ->
+                warn("move to success (unique) failed: #{inspect(move_reason)}")
+                s = %{s | files_failed: s.files_failed + 1, status: :error, current_file: nil}
+                reschedule(s)
+            end
         end
 
       {:error, reason} ->
         # move to errors and drop sidecar
-        dest = Path.join(s.dirs.errors, name)
-        _ = FileManager.write_error_sidecar(s.url, s.u, s.p, dest, reason)
+        if FileFilter.collision?(reason) do
+          dest = Path.join(s.dirs.success, name)
+          alt = FileFilter.unique_variant(dest)
 
-        case FileManager.move(s.url, s.u, s.p, processing_path, dest) do
-          :ok -> :ok
-          {:error, move_reason} -> warn("move to errors failed: #{inspect(move_reason)}")
+          case FileManager.move(s.url, s.u, s.p, processing_path, alt) do
+            :ok ->
+              warn("dest exists, saved as #{alt}")
+
+              s = %{
+                s
+                | files_processed: s.files_processed + 1,
+                  status: :polling,
+                  current_file: nil
+              }
+
+              reschedule(s)
+
+            {:error, move_reason} ->
+              warn("move to success (alt) failed: #{inspect(move_reason)}")
+              s = %{s | files_failed: s.files_failed + 1, status: :error, current_file: nil}
+              reschedule(s)
+          end
+        else
+          warn("move to success failed: #{inspect(reason)}")
+          s = %{s | files_failed: s.files_failed + 1, status: :error, current_file: nil}
+          reschedule(s)
         end
-
-        s = %{s | files_failed: s.files_failed + 1, status: :polling, current_file: nil}
-        reschedule(s)
     end
   end
 

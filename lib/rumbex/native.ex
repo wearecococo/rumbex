@@ -4,7 +4,7 @@ if Mix.target() == :rpi5 do
     @on_load :load_nif
 
     def load_nif do
-      # без расширения — Erlang сам добавит .so
+      # without extension — Erlang will add .so itself
       path = Path.join(:code.priv_dir(:rumbex), "native/librumbex_smb_native")
       :erlang.load_nif(String.to_charlist(path), 0)
     end
