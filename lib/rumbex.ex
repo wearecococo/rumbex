@@ -34,7 +34,8 @@ defmodule Rumbex do
   def list_dir(url_or_unc, username, password, path \\ "/"),
     do: call_pool(url_or_unc, username, password, {:list_dir, path})
 
-  @spec read_file(String.t(), String.t(), String.t(), String.t()) :: {:ok, binary()} | {:error, term()}
+  @spec read_file(String.t(), String.t(), String.t(), String.t()) ::
+          {:ok, binary()} | {:error, term()}
   def read_file(url_or_unc, username, password, path),
     do: call_pool(url_or_unc, username, password, {:read_file, path})
 
@@ -61,7 +62,8 @@ defmodule Rumbex do
   def mkdir_p(url_or_unc, username, password, path),
     do: call_pool(url_or_unc, username, password, {:mkdir_p, path})
 
-  @spec move_file(String.t(), String.t(), String.t(), String.t(), String.t()) :: :ok | {:error, term()}
+  @spec move_file(String.t(), String.t(), String.t(), String.t(), String.t()) ::
+          :ok | {:error, term()}
   def move_file(url_or_unc, username, password, from, to),
     do: call_pool(url_or_unc, username, password, {:move_file, from, to})
 
@@ -70,7 +72,8 @@ defmodule Rumbex do
   def get_stat(url_or_unc, username, password, path),
     do: call_pool(url_or_unc, username, password, {:get_stat, path})
 
-  @spec get_file_stats(String.t(), String.t(), String.t(), String.t()) :: {:ok, map()} | {:error, term()}
+  @spec get_file_stats(String.t(), String.t(), String.t(), String.t()) ::
+          {:ok, map()} | {:error, term()}
   def get_file_stats(url_or_unc, username, password, path),
     do: call_pool(url_or_unc, username, password, {:get_file_stats, path})
 
@@ -89,6 +92,7 @@ defmodule Rumbex do
   def stop_pool(url_or_unc, username, password) do
     {unc, _} = Path.parse_smb_url!(url_or_unc)
     name = pool_name(unc, username, password)
+
     case Registry.lookup(@registry, name) do
       [{pid, _}] -> DynamicSupervisor.terminate_child(PoolSupervisor, pid)
       [] -> :ok
@@ -116,7 +120,9 @@ defmodule Rumbex do
       [] ->
         spec = %{
           id: name,
-          start: {Pool, :start_link, [[name: via(name), url: unc, username: username, password: password, size: size]]}
+          start:
+            {Pool, :start_link,
+             [[name: via(name), url: unc, username: username, password: password, size: size]]}
         }
 
         case DynamicSupervisor.start_child(PoolSupervisor, spec) do
@@ -127,7 +133,7 @@ defmodule Rumbex do
     end
   rescue
     e in ArgumentError -> {:error, e.message}
-    e in ErlangError   -> {:error, e.original}
+    e in ErlangError -> {:error, e.original}
   end
 
   defp pool_name(unc, user, pass) do
