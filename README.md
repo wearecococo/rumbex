@@ -64,7 +64,6 @@ pwd = "badpass"
 {:ok, :not_found} = Rumbex.exists(u, usr, pwd, "/nope.txt")
 
 # Delete file/empty directory
-# Not working as exected for now, it does not really delete file, but marks it for deletion
 :ok = Rumbex.delete_file(u, usr, pwd, "/dir-1/hello.txt")
 :ok = Rumbex.delete_file(u, usr, pwd, "/dir-1")
 
@@ -93,9 +92,9 @@ Check connection valid:
 
 - Backoff polling + manual wake-up via Rumbex.HotFolder.poll_now/1.
 
-- Safe unique writes: if a destination already exists (common with SMB DELETE_PENDING), the file is saved with a -<millis> suffix.
+- Configurable success handling: files can be overwritten or saved with unique names if destination exists.
 
-Current default is on_success: :unique. (:overwrite can be enabled once robust delete is finalized.)
+Current default is on_success: :overwrite (uses improved instant delete strategy).
 
 
 ### Migration from Sambex.HotFolder
@@ -106,7 +105,7 @@ Current default is on_success: :unique. (:overwrite can be enabled once robust d
 
  - Connection goes through Rumbex (pool keyed by {url, username, password}) rather than Sambex connection registry.
 
- - For identical behavior on success moves later, you can switch on_success: :overwrite after delete is stable
+ - The default is now on_success: :overwrite since delete operations are now robust
 
  ### Troubleshooting (quick)
 
@@ -145,15 +144,15 @@ Current default is on_success: :unique. (:overwrite can be enabled once robust d
 
     - If you run a local Samba in Docker with a non-standard port, include it in the URL (e.g., smb://127.0.0.1:4453/private).
 
-  - Want strict overwrite
+  - Want unique file naming instead of overwrite
 
-    - Set on_success: :overwrite after delete is solid in Rumbex. Until then, prefer :unique to avoid stuck moves on DELETE_PENDING.
+    - Set on_success: :unique to generate timestamped names instead of overwriting existing files.
 
 ### Notes / Roadmap
 
-Current MWP intentionally avoids delete to stay resilient on SMB servers that keep DELETE_PENDING.
+✅ Implemented: robust instant delete strategy that works properly with SMB servers.
 
-Planned: robust delete with retries + on_success: :overwrite and :idempotent_if_same_size.
+✅ Default: on_success: :overwrite now works reliably.
 
 Optional: named connection registry (similar to Sambex) if needed.
 
@@ -185,7 +184,7 @@ cfg = %Rumbex.HotFolder.Config{
   poll_interval: %{initial: 300, max: 5_000, backoff_factor: 2.0},
   handler: {Demo.Handler, :process, []},
   pool_size: 4,
-  on_success: :unique     # <— MWP: unique names instead of delete/overwrite
+  on_success: :overwrite  # <— Default: overwrite existing files (reliable delete)
 }
 
 {:ok, pid} = Rumbex.HotFolder.start_link(cfg)

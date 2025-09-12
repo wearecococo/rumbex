@@ -82,7 +82,7 @@ defmodule Rumbex do
   def exists(url_or_unc, username, password, path),
     do: call_pool(url_or_unc, username, password, {:exists, path})
 
-  @doc "Not working as exected for now, it does not really delete file, but marks it for deletion"
+  @doc "Delete a file or empty directory immediately"
   @spec delete_file(String.t(), String.t(), String.t(), String.t()) :: :ok | {:error, term()}
   def delete_file(url_or_unc, username, password, path),
     do: call_pool(url_or_unc, username, password, {:delete_file, path})

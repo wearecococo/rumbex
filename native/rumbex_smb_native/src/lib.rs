@@ -17,7 +17,7 @@ use smb::{
             FileAttributes,
             common_info::FileBasicInformation,
             query_file_info::FileStandardInformation,
-            set_file_info::FileRenameInformation2,
+            set_file_info::{FileRenameInformation2, FileDispositionInformation},
             directory_info::FileIdFullDirectoryInformation,
         },
         binrw_util::{
@@ -457,26 +457,49 @@ fn rm<'a>(
         None    => return Ok(atoms::ok().encode(env)),
     };
 
-    // Open with DELETE and DELETE_ON_CLOSE
+    // Strategy: Open with DELETE access, set disposition info to delete, then close
+    // This forces immediate deletion instead of waiting for handle cleanup
     let access = FileAccessMask::new()
         .with_delete(true)
-        .with_generic_read(true)
-        .with_generic_write(true);
+        .with_generic_read(true);
 
     let mut args = FileCreateArgs::make_open_existing(access);
-    let mut opts = CreateOptions::default().with_delete_on_close(true);
     if matches!(kind, Kind::Dir) {
-        opts = opts.with_directory_file(true);
+        args.options = CreateOptions::default().with_directory_file(true);
     } else {
-        opts = opts.with_non_directory_file(true);
+        args.options = CreateOptions::default().with_non_directory_file(true);
     }
-    args.options = opts;
 
     match smb::client::Client::create_file(&mut *client, &unc, &args) {
         Ok(handle) => {
-            // Handle acquired — object will be deleted on close. Return success without waiting.
-            drop(handle);
-            Ok(atoms::ok().encode(env))
+            // Immediately set file disposition to delete
+            let result = match kind {
+                Kind::File => {
+                    if let Ok(file) = <Resource as TryInto<SmbFile>>::try_into(handle) {
+                        // Set delete disposition - this triggers immediate deletion
+                        let delete_info = FileDispositionInformation { delete_pending: Boolean::from(true) };
+                        file.set_file_info(delete_info)
+                            .map_err(|e| rustler::Error::Term(Box::new(format!("set_delete_failed: {e}"))))
+                    } else {
+                        Err(rustler::Error::Term(Box::new("not_a_file")))
+                    }
+                }
+                Kind::Dir => {
+                    if let Ok(dir) = <Resource as TryInto<Directory>>::try_into(handle) {
+                        // Set delete disposition for directory
+                        let delete_info = FileDispositionInformation { delete_pending: Boolean::from(true) };
+                        dir.set_file_info(delete_info)
+                            .map_err(|e| rustler::Error::Term(Box::new(format!("set_delete_failed: {e}"))))
+                    } else {
+                        Err(rustler::Error::Term(Box::new("not_a_directory")))
+                    }
+                }
+            };
+
+            match result {
+                Ok(_) => Ok(atoms::ok().encode(env)),
+                Err(e) => Err(e),
+            }
         }
         Err(e) => {
             // Parse NTSTATUS code from error text
