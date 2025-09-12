@@ -121,4 +121,17 @@ defmodule Rumbex.HotFolder.FileManager do
       _ -> :ok
     end
   end
+
+  @doc """
+  Check if a file should be processed by the hot folder.
+  
+  Returns true if file exists and is accessible (not in delete-pending state).
+  This helps avoid processing files that have been deleted by other connections.
+  """
+  def should_process?(url, u, p, path) do
+    case {Rumbex.exists(url, u, p, path), Rumbex.is_accessible(url, u, p, path)} do
+      {{:ok, :file}, {:ok, true}} -> true
+      _ -> false
+    end
+  end
 end

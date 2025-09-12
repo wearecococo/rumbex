@@ -17,7 +17,7 @@ use smb::{
             FileAttributes,
             common_info::FileBasicInformation,
             query_file_info::FileStandardInformation,
-            set_file_info::{FileRenameInformation2, FileDispositionInformation},
+            set_file_info::FileRenameInformation2,
             directory_info::FileIdFullDirectoryInformation,
         },
         binrw_util::{
@@ -83,6 +83,26 @@ fn open_for_kind(client: &mut smb::Client, unc: &UncPath) -> Option<Kind> {
         return out;
     }
     None
+}
+
+// Check if file is accessible (not in delete-pending state)
+fn is_file_accessible(client: &mut smb::Client, unc: &UncPath) -> bool {
+    let access = FileAccessMask::new().with_generic_read(true);
+    let args = FileCreateArgs::make_open_existing(access);
+    
+    match smb::client::Client::create_file(client, unc, &args) {
+        Ok(res) => {
+            drop(res);
+            true
+        }
+        Err(e) => {
+            // Check if it's a delete pending error
+            match ntstatus_from_err_display(&e) {
+                Some(STATUS_DELETE_PENDING) => false,
+                _ => true, // Other errors don't indicate delete pending
+            }
+        }
+    }
 }
 
 fn ntstatus_from_err_display<E: std::fmt::Display>(e: &E) -> Option<u32> {
@@ -457,49 +477,25 @@ fn rm<'a>(
         None    => return Ok(atoms::ok().encode(env)),
     };
 
-    // Strategy: Open with DELETE access, set disposition info to delete, then close
-    // This forces immediate deletion instead of waiting for handle cleanup
+    // Strategy: Use DELETE_ON_CLOSE for best attempt at immediate deletion
+    // Note: SMB protocol limitations mean files may remain visible until all handles are closed
     let access = FileAccessMask::new()
-        .with_delete(true)
-        .with_generic_read(true);
+        .with_delete(true);
 
     let mut args = FileCreateArgs::make_open_existing(access);
+    let mut opts = CreateOptions::default().with_delete_on_close(true);
     if matches!(kind, Kind::Dir) {
-        args.options = CreateOptions::default().with_directory_file(true);
+        opts = opts.with_directory_file(true);
     } else {
-        args.options = CreateOptions::default().with_non_directory_file(true);
+        opts = opts.with_non_directory_file(true);
     }
+    args.options = opts;
 
     match smb::client::Client::create_file(&mut *client, &unc, &args) {
         Ok(handle) => {
-            // Immediately set file disposition to delete
-            let result = match kind {
-                Kind::File => {
-                    if let Ok(file) = <Resource as TryInto<SmbFile>>::try_into(handle) {
-                        // Set delete disposition - this triggers immediate deletion
-                        let delete_info = FileDispositionInformation { delete_pending: Boolean::from(true) };
-                        file.set_file_info(delete_info)
-                            .map_err(|e| rustler::Error::Term(Box::new(format!("set_delete_failed: {e}"))))
-                    } else {
-                        Err(rustler::Error::Term(Box::new("not_a_file")))
-                    }
-                }
-                Kind::Dir => {
-                    if let Ok(dir) = <Resource as TryInto<Directory>>::try_into(handle) {
-                        // Set delete disposition for directory
-                        let delete_info = FileDispositionInformation { delete_pending: Boolean::from(true) };
-                        dir.set_file_info(delete_info)
-                            .map_err(|e| rustler::Error::Term(Box::new(format!("set_delete_failed: {e}"))))
-                    } else {
-                        Err(rustler::Error::Term(Box::new("not_a_directory")))
-                    }
-                }
-            };
-
-            match result {
-                Ok(_) => Ok(atoms::ok().encode(env)),
-                Err(e) => Err(e),
-            }
+            // Close handle immediately to trigger deletion
+            drop(handle);
+            Ok(atoms::ok().encode(env))
         }
         Err(e) => {
             // Parse NTSTATUS code from error text
@@ -695,6 +691,27 @@ fn rename<'a>(
 fn on_load(env: Env, _info: Term) -> bool {
     let _ty = rustler::resource!(Conn, env);
     true
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn is_accessible<'a>(
+    env: Env<'a>,
+    conn: ResourceArc<Conn>,
+    path_in_share: String,
+) -> NifResult<Term<'a>> {
+    let rel = path_in_share.trim_matches(['\\', '/']);
+    if rel.is_empty() {
+        return Ok((atoms::ok(), true).encode(env));
+    }
+
+    let full = format!(r"{}\{}", conn.share.to_string().trim_end_matches('\\'), rel);
+    let unc  = UncPath::from_str(&full).map_err(|_| rustler::Error::BadArg)?;
+
+    let mut guard = conn.client.lock()
+        .map_err(|_| rustler::Error::Term(Box::new("mutex_poisoned")))?;
+
+    let accessible = is_file_accessible(&mut *guard, &unc);
+    Ok((atoms::ok(), accessible).encode(env))
 }
 
 rustler::init!(

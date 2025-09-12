@@ -87,6 +87,16 @@ defmodule Rumbex do
   def delete_file(url_or_unc, username, password, path),
     do: call_pool(url_or_unc, username, password, {:delete_file, path})
 
+  @doc """
+  Check if a file is accessible (not in delete-pending state).
+  
+  Returns {:ok, true} if file is accessible, {:ok, false} if file is marked for deletion
+  and cannot be opened by new handles.
+  """
+  @spec is_accessible(String.t(), String.t(), String.t(), String.t()) :: {:ok, boolean()} | {:error, term()}
+  def is_accessible(url_or_unc, username, password, path),
+    do: call_pool(url_or_unc, username, password, {:is_accessible, path})
+
   @doc "Stop and remove the pool for the combination (url_or_unc, username, password)."
   @spec stop_pool(String.t(), String.t(), String.t()) :: :ok | {:error, term()}
   def stop_pool(url_or_unc, username, password) do
