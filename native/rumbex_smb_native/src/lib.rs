@@ -85,6 +85,26 @@ fn open_for_kind(client: &mut smb::Client, unc: &UncPath) -> Option<Kind> {
     None
 }
 
+// Check if file is accessible (not in delete-pending state)
+fn is_file_accessible(client: &mut smb::Client, unc: &UncPath) -> bool {
+    let access = FileAccessMask::new().with_generic_read(true);
+    let args = FileCreateArgs::make_open_existing(access);
+    
+    match smb::client::Client::create_file(client, unc, &args) {
+        Ok(res) => {
+            drop(res);
+            true
+        }
+        Err(e) => {
+            // Check if it's a delete pending error
+            match ntstatus_from_err_display(&e) {
+                Some(STATUS_DELETE_PENDING) => false,
+                _ => true, // Other errors don't indicate delete pending
+            }
+        }
+    }
+}
+
 fn ntstatus_from_err_display<E: std::fmt::Display>(e: &E) -> Option<u32> {
     let s = e.to_string();
     let start = s.find("(0x")?;
@@ -457,11 +477,10 @@ fn rm<'a>(
         None    => return Ok(atoms::ok().encode(env)),
     };
 
-    // Open with DELETE and DELETE_ON_CLOSE
+    // Strategy: Use DELETE_ON_CLOSE for best attempt at immediate deletion
+    // Note: SMB protocol limitations mean files may remain visible until all handles are closed
     let access = FileAccessMask::new()
-        .with_delete(true)
-        .with_generic_read(true)
-        .with_generic_write(true);
+        .with_delete(true);
 
     let mut args = FileCreateArgs::make_open_existing(access);
     let mut opts = CreateOptions::default().with_delete_on_close(true);
@@ -474,7 +493,7 @@ fn rm<'a>(
 
     match smb::client::Client::create_file(&mut *client, &unc, &args) {
         Ok(handle) => {
-            // Handle acquired — object will be deleted on close. Return success without waiting.
+            // Close handle immediately to trigger deletion
             drop(handle);
             Ok(atoms::ok().encode(env))
         }
@@ -672,6 +691,27 @@ fn rename<'a>(
 fn on_load(env: Env, _info: Term) -> bool {
     let _ty = rustler::resource!(Conn, env);
     true
+}
+
+#[rustler::nif(schedule = "DirtyIo")]
+fn is_accessible<'a>(
+    env: Env<'a>,
+    conn: ResourceArc<Conn>,
+    path_in_share: String,
+) -> NifResult<Term<'a>> {
+    let rel = path_in_share.trim_matches(['\\', '/']);
+    if rel.is_empty() {
+        return Ok((atoms::ok(), true).encode(env));
+    }
+
+    let full = format!(r"{}\{}", conn.share.to_string().trim_end_matches('\\'), rel);
+    let unc  = UncPath::from_str(&full).map_err(|_| rustler::Error::BadArg)?;
+
+    let mut guard = conn.client.lock()
+        .map_err(|_| rustler::Error::Term(Box::new("mutex_poisoned")))?;
+
+    let accessible = is_file_accessible(&mut *guard, &unc);
+    Ok((atoms::ok(), accessible).encode(env))
 }
 
 rustler::init!(

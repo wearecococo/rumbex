@@ -1,0 +1,23 @@
+services:
+  samba:
+    image: "dperson/samba"
+    ports:
+      - "139:139"
+      - "445:445"
+    command:
+      - -p
+      - -u
+      - "example1;badpass"
+      - -u
+      - "example2;badpass"
+      - -s
+      - "public;/share;no;no;yes;example1;none;none;public share"
+      - -s
+      - "private;/share-2;no;no;no;example2;none;none;private share"
+      - -g
+      - "vfs objects = "
+      - -g
+      - "log level = 2"
+    volumes:
+      - ./tmp/share:/share
+      - ./tmp/share-2:/share-2

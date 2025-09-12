@@ -45,6 +45,7 @@ defmodule Rumbex.Pool do
   def get_file_stats(pool, path), do: GenServer.call(pool, {:get_file_stats, path}, :infinity)
   def exists(pool, path), do: GenServer.call(pool, {:exists, path}, :infinity)
   def delete_file(pool, path), do: GenServer.call(pool, {:delete_file, path}, :infinity)
+  def is_accessible(pool, path), do: GenServer.call(pool, {:is_accessible, path}, :infinity)
   def refresh(pool, which \\ :all), do: GenServer.call(pool, {:refresh, which}, :infinity)
 
   ## ===== GenServer =====
@@ -128,6 +129,11 @@ defmodule Rumbex.Pool do
   def handle_call({:delete_file, path}, _f, s) do
     {conn, s2} = checkout(s)
     {:reply, Operations.delete_file(conn, Path.norm(path)), s2}
+  end
+
+  def handle_call({:is_accessible, path}, _f, s) do
+    {conn, s2} = checkout(s)
+    {:reply, Operations.is_accessible(conn, Path.norm(path)), s2}
   end
 
   def handle_call({:refresh, :all}, _f, s) do

@@ -104,4 +104,12 @@ defmodule Rumbex.Operations do
       e in ErlangError -> {:error, e.original}
     end
   end
+
+  def is_accessible(conn, rel) do
+    try do
+      Native.is_accessible(conn, rel)
+    rescue
+      e in ErlangError -> {:error, e.original}
+    end
+  end
 end
